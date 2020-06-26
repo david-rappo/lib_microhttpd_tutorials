@@ -14,7 +14,12 @@
 #include <boost/algorithm/string.hpp>
 
 // System
+#include <arpa/inet.h>
+
+#include <netinet/in.h>
+
 #include <sys/select.h>
+// Defines sockaddr
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -41,6 +46,8 @@ std::string create_another_page(const std::string &url);
 
 std::string create_not_found_page(const std::string &url);
 
+int on_client_connect(void *cls, const struct sockaddr *addr, socklen_t addrlen);
+
 int main(int argc, char **argv)
 {
     constexpr uint16_t port{8888};
@@ -49,7 +56,7 @@ int main(int argc, char **argv)
     const auto flags = MHD_USE_AUTO|MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_PEDANTIC_CHECKS;
     auto daemon = MHD_start_daemon(flags,
         port,
-        nullptr,
+        on_client_connect,
         nullptr,
         &answer_to_connection,
         nullptr,
@@ -117,6 +124,38 @@ std::string create_not_found_page(const std::string &url)
     oss << "</body>";
     oss << "</html>";
     return oss.str();
+}
+
+int on_client_connect(void *cls, const struct sockaddr *addr, socklen_t addrlen)
+{
+    switch (addr->sa_family)
+    {
+    case AF_INET:
+    {
+        auto socket_address_in = reinterpret_cast<const struct sockaddr_in*>(addr);
+        const auto &address = socket_address_in->sin_addr;
+        auto port = ntohs(socket_address_in->sin_port);
+        char buffer[INET_ADDRSTRLEN];
+        const char *address_string = inet_ntop(addr->sa_family, &address, buffer, sizeof(buffer));
+        std::cout << "(AF_INET) Client address: " << ((nullptr == address_string) ? "ERR" : address_string);
+        std::cout << " port: " << port << "\n";
+    }
+    break;
+    case AF_INET6:
+    {
+        auto socket_address_in = reinterpret_cast<const struct sockaddr_in6*>(addr);
+        const auto &address = socket_address_in->sin6_addr;
+        auto port = ntohs(socket_address_in->sin6_port);
+        char buffer[INET6_ADDRSTRLEN];
+        const char *address_string = inet_ntop(addr->sa_family, &address, buffer, sizeof(buffer));
+        std::cout << "(AF_INET6) Client address: " << ((nullptr == address_string) ? "ERR" : address_string);
+        std::cout << " port: " << port << "\n";
+    }
+    break;
+        std::cout << "Unknown Address Family\n";
+    }
+    
+    return MHD_YES;
 }
 
 int answer_to_connection(void *cls,
