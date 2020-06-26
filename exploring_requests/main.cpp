@@ -130,6 +130,7 @@ int on_client_connect(void *cls, const struct sockaddr *addr, socklen_t addrlen)
 {
     switch (addr->sa_family)
     {
+    
     case AF_INET:
     {
         auto socket_address_in = reinterpret_cast<const struct sockaddr_in*>(addr);
@@ -141,6 +142,7 @@ int on_client_connect(void *cls, const struct sockaddr *addr, socklen_t addrlen)
         std::cout << " port: " << port << "\n";
     }
     break;
+    
     case AF_INET6:
     {
         auto socket_address_in = reinterpret_cast<const struct sockaddr_in6*>(addr);
@@ -152,7 +154,13 @@ int on_client_connect(void *cls, const struct sockaddr *addr, socklen_t addrlen)
         std::cout << " port: " << port << "\n";
     }
     break;
+
+    default:
+    {
         std::cout << "Unknown Address Family\n";
+    }
+    break;
+    
     }
     
     return MHD_YES;
