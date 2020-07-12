@@ -10,6 +10,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <stdexcept>
 
 // Boost
@@ -26,6 +27,8 @@
 #include <sys/socket.h> // Defines sockaddr
 #include <sys/types.h>
 
+#include <unistd.h>
+
 // libmicrohttpd
 #include <microhttpd.h>
 
@@ -34,6 +37,14 @@
 
 // response_headers program
 #include "file_utility.h"
+
+namespace Jade
+{
+
+const std::string large_file{"big.png"};
+const std::string small_file{"picture.png"};
+
+} // Jade
 
 int answer_to_connection(void *cls,
     struct MHD_Connection *connection,
@@ -48,7 +59,8 @@ std::string create_error_page();
 
 // Note: decltype(MHD_destroy_response) returns the type of the function MHD_destroy_response. The
 //       '*' indicates that the type of the std::unique_ptr template paramter _Dp is a pointer.
-std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_response();
+std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_response(const std::string_view &file_name,
+    unsigned artificial_delay_seconds);
 
 std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_error_response();
 
@@ -57,7 +69,10 @@ int main(int argc, char **argv)
     constexpr uint16_t port{8888};
     // Flag MHD_USE_PEDANTIC_CHECKS is deprecated. It was replaced with MHD_OPTION_STRICT_FOR_CLIENT.
     // However, MHD_OPTION_STRICT_FOR_CLIENT does not seem to work.
-    const auto flags = MHD_USE_AUTO|MHD_USE_INTERNAL_POLLING_THREAD|MHD_USE_PEDANTIC_CHECKS;
+    const auto flags = MHD_USE_AUTO|
+        MHD_USE_INTERNAL_POLLING_THREAD|
+        MHD_USE_PEDANTIC_CHECKS|
+        MHD_USE_THREAD_PER_CONNECTION;
     auto daemon = MHD_start_daemon(flags,
         port,
         nullptr,
@@ -92,12 +107,12 @@ std::string create_error_page()
 }
 
 // open(2) - Linux man page: https://linux.die.net/man/2/open
-std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_response()
+std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_response(const std::string_view &file_name,
+    unsigned artificial_delay_seconds)
 {
     using namespace std::string_literals;
     
-    const auto file_name{"picture.png"s};
-    auto file_descriptor = open(file_name.c_str(), O_RDONLY);
+    auto file_descriptor = open(file_name.data(), O_RDONLY);
     if (-1 == file_descriptor)
     {
         return create_error_response();
@@ -130,6 +145,12 @@ std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> create_response()
         throw std::runtime_error{oss.str()};
     }
 
+    if (0 != artificial_delay_seconds)
+    {
+        std::cout << "Sleeping for " << artificial_delay_seconds << " seconds\n";
+        sleep(artificial_delay_seconds);
+    }
+    
     std::cout << "Returning MHD_Response created by MHD_create_response_from_fd_at_offset64\n";
     return up_response;
 }
@@ -165,6 +186,19 @@ int answer_to_connection(void *cls,
         return MHD_NO;
     }
 
-    auto up_response = create_response();
+    auto url_string = std::string(url);
+    boost::algorithm::trim(url_string);
+    std::unique_ptr<MHD_Response, decltype(MHD_destroy_response)*> up_response{nullptr, MHD_destroy_response};
+    if ("/" + Jade::large_file == url_string)
+    {
+        const auto file_name = std::string_view{Jade::large_file.c_str(), Jade::large_file.size()};
+        up_response = create_response(file_name, 10);
+    }
+    else if ("/" + Jade::small_file == url_string)
+    {
+        const auto file_name = std::string_view{Jade::small_file.c_str(), Jade::small_file.size()};
+        up_response = create_response(file_name, 0);
+    }
+
     return MHD_queue_response(connection, MHD_HTTP_OK, up_response.get());
 }
