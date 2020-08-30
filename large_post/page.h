@@ -11,21 +11,22 @@ namespace Jade
 namespace Page
 {
 
-const std::string name_field{"name"};
+const std::string file_field{"file"};
 
-const std::size_t maximum_name_size{32};
-
-const std::string ask_page_content{"<html><body>Enter name<br>"
-    "<form action=\"/namepost\" method=\"post\">"
-    "<input name=\"name\" type=\"text\">"
-    "<input type=\"submit\" value=\" Send \"></form>"
-    "</body></html>"};
+const std::string complete_page_content{"<html><body>Upload completed</body></html>"};
 
 const std::string error_page_content{"<html><body>Error</body></html>"};
 
 const std::string busy_page_content{"<html><body>The server is busy.</body></html>"};
 
-std::string create_greeting_page_content(std::experimental::string_view name);
+const std::string post_process_error_content{
+    "<html><head><title>Error</title></head><body>Error processing POST data</body></html>"};
+
+const std::string file_input_output_error_page_content{"<html><body>File Input Output error</body></html>"};
+
+std::string create_ask_page_content(std::size_t client_count);
+
+std::string create_file_exists_content(std::experimental::string_view file_name);
 
 } // Page
 

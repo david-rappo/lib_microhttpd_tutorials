@@ -73,6 +73,10 @@ private:
         void **con_cls,
         MHD_RequestTerminationCode toe);
 
+    int handle_initial_client_connection(MHD_Connection *connection,
+        const char *method,
+        void *&extra_connection_data);
+
     std::atomic<std::size_t> m_number_of_uploading_clients{};
     
     std::unique_ptr<MHD_Daemon, decltype(MHD_stop_daemon)*> m_daemon{nullptr, MHD_stop_daemon};

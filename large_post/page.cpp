@@ -11,12 +11,25 @@ namespace Jade
 namespace Page
 {
 
-std::string create_greeting_page_content(std::experimental::string_view name)
+std::string create_ask_page_content(std::size_t client_count)
 {
     std::ostringstream oss;
-    oss << "<html><body><h1>Welcome ";
-    oss << name.data();
-    oss << "</center></h1></body></html>";
+    oss << "<html><body>";
+    oss << "Choose file to upload<br>";
+    oss << "There are " << client_count << " clients uploading at the moment<br>";
+    oss << "<form action=\"/filepost\" method=\"post\" enctype=\"multipart/form-data\">";
+    oss << "<input name=\"file\" type=\"file\">";
+    oss << "<input type=\"submit\" value=\"send\"></form>";
+    oss << "</body></html>";
+    return oss.str();
+}
+
+std::string create_file_exists_content(std::experimental::string_view file_name)
+{
+    std::ostringstream oss;
+    oss << "<html><body>";
+    oss << "The file \"" << file_name << "\" already exists.";
+    oss << "</body></html>";
     return oss.str();
 }
 

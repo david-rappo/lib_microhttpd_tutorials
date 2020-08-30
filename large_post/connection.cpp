@@ -4,6 +4,7 @@
 
 // C++ Standard Library
 #include <cassert>
+#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -11,6 +12,13 @@
 
 // processing_post_data program
 #include "page.h"
+
+namespace Jade
+{
+
+std::mutex Connection::file_mutex{};
+
+} // Jade
 
 namespace Jade
 {
@@ -38,6 +46,8 @@ int Connection::post_data_iterator_static(void *cls,
         size);
 }
 
+// MHD_YES: Continue iterating.
+// MHD_NO: Stop iterating.
 int Connection::post_data_iterator(enum MHD_ValueKind kind,
     const char *key,
     const char *file_name,
@@ -49,30 +59,73 @@ int Connection::post_data_iterator(enum MHD_ValueKind kind,
 {
     assert(nullptr != key);
     const auto key_string = std::string{key};
-    if (Jade::Page::name_field == key_string)
+    if (Jade::Page::file_field != key_string)
     {
-        if ((size > 0) && (size <= Jade::Page::maximum_name_size))
+        set_answer_string(Jade::Page::error_page_content);
+        set_http_status_code(MHD_HTTP_BAD_REQUEST);
+        return MHD_YES;
+    }
+
+    if (nullptr == get_file())
+    {
+        // An error occurred.
+        if (0 != get_http_status_code())
         {
-            assert(nullptr != data);
-            const auto greeting_page_content = Jade::Page::create_greeting_page_content(data);
-            set_answer_string(greeting_page_content);
-        }
-        else
-        {
-            set_answer_string(std::string{});
+            return MHD_YES;
         }
 
-        // Stop iterating.
-        return MHD_NO;
+        // The reason for locking file_mutex is that the tutorial (7 - Improved processing of POST data) mentioned a
+        // possible race condition between the two calls to std::fopen.
+        std::lock_guard<std::mutex> lock_guard{file_mutex};
+        // Check if another client specified a file with the same name.
+        std::cout << "Connection::post_data_iterator";
+        std::cout << " Opening " << file_name << "...\n";
+        auto file_handle = std::fopen(file_name, "rb");
+        std::unique_ptr<FILE, decltype(std::fclose)*> up_file_handle{file_handle, std::fclose};
+        if (nullptr != up_file_handle)
+        {
+            const auto page_content = Jade::Page::create_file_exists_content(file_name);
+            set_answer_string(page_content);
+            set_http_status_code(MHD_HTTP_FORBIDDEN);
+            return MHD_YES;
+        }
+
+        // Open the file called file_name in "Append" mode to write more data to it.
+        file_handle = std::fopen(file_name, "ab");
+        up_file_handle.reset(file_handle);
+        set_file(std::move(up_file_handle));
+        if (nullptr == get_file())
+        {
+            set_answer_string(Jade::Page::file_input_output_error_page_content);
+            set_http_status_code(MHD_HTTP_INTERNAL_SERVER_ERROR);
+            return MHD_YES;
+        }
     }
     
-    // Continue iterating.
+    if (size > 0)
+    {
+        std::cout << "Connection::post_data_iterator";
+        std::cout << " Attempting to write " << size << " bytes to " << file_name << "\n";
+        const auto result = std::fwrite(data, sizeof(char), size, get_file());
+        if (0 == result)
+        {
+            set_answer_string(Jade::Page::file_input_output_error_page_content);
+            set_http_status_code(MHD_HTTP_INTERNAL_SERVER_ERROR);
+            return MHD_YES;
+        }
+    }
+
     return MHD_YES;
 }
 
 int Connection::get_http_status_code() const
 {
     return m_http_status_code;
+}
+
+void Connection::set_http_status_code(int http_status_code)
+{
+    m_http_status_code = http_status_code;
 }
 
 Connection::connection_type Connection::get_connection_type() const
@@ -88,6 +141,11 @@ void Connection::set_connection_type(connection_type c)
 const std::string &Connection::get_answer_string() const
 {
     return m_answer_string;
+}
+
+void Connection::set_answer_string(std::experimental::string_view answer_string)
+{
+    m_answer_string = std::string(answer_string.data(), answer_string.size());
 }
 
 const MHD_PostProcessor *Connection::get_post_processor() const
@@ -121,9 +179,9 @@ void Connection::set_file(std::unique_ptr<FILE, decltype(std::fclose)*> &&file)
     m_file = std::move(file);
 }
 
-void Connection::set_answer_string(const std::string &answer_string)
+void Connection::close_file()
 {
-    m_answer_string = answer_string;
+    m_file.reset();
 }
 
 } // Jade
